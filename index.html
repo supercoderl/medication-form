@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Trình chuyển đổi Key Form (CDA / XML)</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">⬡</span>
+      <span>Trình chuyển đổi Key Form</span>
+    </div>
+    <nav class="tabs" role="tablist">
+      <button class="tab active" data-tab="preview" role="tab">Xem trước &amp; Chỉnh sửa</button>
+      <button class="tab" data-tab="sql" role="tab">Sinh SQL</button>
+    </nav>
+  </header>
+
+  <!-- Khu nhập mã nguồn (dùng chung cho cả 2 tab) -->
+  <section class="xml-input-bar">
+    <div class="xml-input-head">
+      <button id="toggleXml" class="link-btn" type="button">▾ Mã nguồn</button>
+      <div class="src-tabs">
+        <button class="src-tab active" data-src="xml" type="button">XML</button>
+        <button class="src-tab" data-src="xsl" type="button">XSL</button>
+      </div>
+      <div class="xml-actions">
+        <button id="loadSample" class="btn ghost" type="button">Tải mẫu</button>
+        <button id="copySrc" class="btn ghost" type="button">Sao chép code</button>
+        <button id="renderBtn" class="btn primary" type="button">Render &amp; Bóc key</button>
+      </div>
+    </div>
+    <div id="xmlWrap" class="xml-wrap">
+      <textarea id="xmlInput" class="xml-area src-area" data-src="xml" spellcheck="false"
+        placeholder="Dán đoạn code XML / CDA của bạn vào đây rồi bấm 'Render & Bóc key'..."></textarea>
+      <textarea id="xslInput" class="xml-area src-area" data-src="xsl" spellcheck="false" hidden
+        placeholder="(Tuỳ chọn) Dán code XSL ở đây để render preview bằng đúng stylesheet của bạn..."></textarea>
+      <div id="xmlError" class="xml-error" hidden></div>
+    </div>
+  </section>
+
+  <!-- TAB: Preview -->
+  <main id="tab-preview" class="tab-panel active">
+    <aside class="keys-panel">
+      <div class="panel-head">
+        <h2>Danh sách Key <span id="keyCount" class="badge">0</span></h2>
+        <div class="panel-tools">
+          <input id="keySearch" class="search" type="text" placeholder="Tìm key..." />
+          <button id="clearValues" class="btn ghost sm" type="button" title="Xoá toàn bộ giá trị">Xoá hết</button>
+        </div>
+      </div>
+      <div id="keyList" class="key-list"></div>
+    </aside>
+
+    <section class="preview-panel">
+      <div class="preview-toolbar">
+        <span class="muted">Bản xem trước</span>
+        <button id="printBtn" class="btn ghost sm" type="button">In / PDF</button>
+      </div>
+      <div class="paper-scroll">
+        <article id="paper" class="paper"></article>
+      </div>
+    </section>
+  </main>
+
+  <!-- TAB: SQL -->
+  <main id="tab-sql" class="tab-panel">
+    <aside class="sql-config">
+      <h2>Cấu hình SQL</h2>
+
+      <label class="field">
+        <span>Tên bảng</span>
+        <input id="sqlTable" class="input" type="text" value="OBSERVATION" />
+      </label>
+
+      <fieldset class="field">
+        <span>Nguồn giá trị</span>
+        <label class="radio"><input type="radio" name="valSource" value="key" checked /> Giữ key gốc (<code>#key#</code>)</label>
+        <label class="radio"><input type="radio" name="valSource" value="value" /> Giá trị hiện tại đã nhập</label>
+      </fieldset>
+
+      <fieldset class="field">
+        <span>Kiểu câu lệnh</span>
+        <label class="radio"><input type="radio" name="sqlMode" value="multi" checked /> Một INSERT nhiều dòng</label>
+        <label class="radio"><input type="radio" name="sqlMode" value="single" /> Nhiều INSERT riêng</label>
+      </fieldset>
+
+      <label class="checkbox-row">
+        <input id="sqlUnicode" type="checkbox" checked /> Dùng tiền tố <code>N'...'</code> (Unicode / SQL Server)
+      </label>
+
+      <div class="field">
+        <div class="entries-head">
+          <span>Cột dữ liệu (<span id="entryCount">0</span>)</span>
+          <label class="mini"><input id="checkAll" type="checkbox" checked /> Chọn tất cả</label>
+        </div>
+        <div id="entryList" class="entry-list"></div>
+      </div>
+    </aside>
+
+    <section class="sql-output">
+      <div class="preview-toolbar">
+        <span class="muted">Câu lệnh SQL</span>
+        <div>
+          <button id="genSql" class="btn primary sm" type="button">Sinh SQL</button>
+          <button id="copySql" class="btn ghost sm" type="button">Sao chép</button>
+        </div>
+      </div>
+      <textarea id="sqlOut" class="sql-area" spellcheck="false" readonly
+        placeholder="Bấm 'Sinh SQL' để tạo câu lệnh insert từ các key..."></textarea>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="sample-xml.js"></script>
+  <script src="sample-xsl.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
