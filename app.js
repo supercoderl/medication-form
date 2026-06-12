@@ -337,6 +337,31 @@ function filterKeys(term) {
   });
 }
 
+// Bật/tắt dấu # cuối cho TẤT CẢ key
+function setAllSuffix(wantDouble) {
+  const keys = Object.keys(state.keyFormats);
+  if (!keys.length) return;
+  // Thay trong XML và XSL
+  let xml = $('#xmlInput').value;
+  let xsl = $('#xslInput').value;
+  keys.forEach((key) => {
+    const reDouble = new RegExp('#' + escapeRegex(key) + '#', 'g');
+    const reSingle = new RegExp('#' + escapeRegex(key) + '(?![A-Za-z0-9_#])', 'g');
+    if (wantDouble) {
+      xml = xml.replace(reSingle, '#' + key + '#');
+      xsl = xsl.replace(reSingle, '#' + key + '#');
+    } else {
+      xml = xml.replace(reDouble, '#' + key);
+      xsl = xsl.replace(reDouble, '#' + key);
+    }
+    state.keyFormats[key] = wantDouble ? 'double' : 'single';
+  });
+  $('#xmlInput').value = xml;
+  $('#xslInput').value = xsl;
+  renderFromXml();
+  toast(wantDouble ? 'Đã thêm # cuối tất cả key' : 'Đã bỏ # cuối tất cả key');
+}
+
 /* ============================================================
  * Thay key bằng giá trị
  * ========================================================== */
@@ -588,6 +613,8 @@ function initEvents() {
 
   $('#renderBtn').addEventListener('click', renderFromXml);
   $('#resetRenderBtn').addEventListener('click', resetAndRender);
+  $('#addAllSuffix').addEventListener('click', () => setAllSuffix(true));
+  $('#removeAllSuffix').addEventListener('click', () => setAllSuffix(false));
   $('#loadSample').addEventListener('click', () => {
     $('#xmlInput').value = window.SAMPLE_XML || '';
     $('#xslInput').value = window.SAMPLE_XSL || '';
