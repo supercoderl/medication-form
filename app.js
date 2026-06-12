@@ -13,7 +13,7 @@ const state = {
 };
 
 const CHECK_TRUE = ['x', 'true', '1', 'yes', 'co', 'có', 'checked', '✓', '☑'];
-const KEY_RE = /#([^#\s<>]+)#/g;
+const KEY_RE = /#([A-Za-z][A-Za-z0-9_]*)/g;
 
 /* ============================================================
  * Tiện ích
@@ -100,7 +100,7 @@ function scanLabelsAndCheckboxes(doc) {
     const type = value.getAttribute('xsi:type')
       || value.getAttributeNS('http://www.w3.org/2001/XMLSchema-instance', 'type');
     const raw = value.getAttribute('value') != null ? value.getAttribute('value') : value.textContent;
-    const km = String(raw).match(/#([^#\s<>]+)#/);
+    const km = String(raw).match(/#([A-Za-z][A-Za-z0-9_]*)/);
     if (km) {
       const key = km[1];
       if (display) state.keyLabels[key] = display;
@@ -167,7 +167,6 @@ function buildKeyPanel(keys) {
     nameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') nameInput.blur(); });
     renameRow.innerHTML = '<span class="hash">#</span>';
     renameRow.appendChild(nameInput);
-    renameRow.insertAdjacentHTML('beforeend', '<span class="hash">#</span>');
     wrap.appendChild(renameRow);
 
     // Hàng giá trị xem trước
@@ -192,7 +191,7 @@ function renameKey(oldKey, newKey) {
     toast('Tên key không hợp lệ (không chứa # khoảng trắng < >)');
     return false;
   }
-  const re = new RegExp('#' + escapeRegex(oldKey) + '#', 'g');
+  const re = new RegExp('#' + escapeRegex(oldKey) + '(?![A-Za-z0-9_])', 'g');
   $('#xmlInput').value = $('#xmlInput').value.replace(re, '#' + newKey + '#');
   $('#xslInput').value = $('#xslInput').value.replace(re, '#' + newKey + '#');
 
@@ -221,7 +220,7 @@ function filterKeys(term) {
  * ========================================================== */
 // Cho chuỗi HTML (dùng sau khi transform bằng XSL)
 function substituteInHtml(html) {
-  return html.replace(/#([^#\s<>]+)#/g, (full, key) => keyToHtml(key));
+  return html.replace(/#([A-Za-z][A-Za-z0-9_]*)/g, (full, key) => keyToHtml(key));
 }
 // Quy tắc render 1 key
 function keyToHtml(key) {
@@ -230,12 +229,12 @@ function keyToHtml(key) {
   }
   const v = state.keyValues[key];
   if (v !== undefined && v !== '') return `<span class="val">${escapeHtml(v)}</span>`;
-  return `<span class="unfilled">#${escapeHtml(key)}#</span>`;
+  return `<span class="unfilled">#${escapeHtml(key)}</span>`;
 }
 // Cho text thuần (dùng trong bộ render mặc định)
 function substitute(text) {
   let out = '', last = 0, m;
-  const re = /#([^#\s<>]+)#/g;
+  const re = /#([A-Za-z][A-Za-z0-9_]*)/g;
   while ((m = re.exec(text)) !== null) {
     out += escapeHtml(text.slice(last, m.index));
     out += keyToHtml(m[1]);
@@ -358,7 +357,7 @@ function buildEntries(doc) {
     const type = value.getAttribute('xsi:type')
       || value.getAttributeNS('http://www.w3.org/2001/XMLSchema-instance', 'type') || 'ST';
     const raw = value.getAttribute('value') != null ? value.getAttribute('value') : value.textContent.trim();
-    const km = String(raw).match(/#([^#\s<>]+)#/);
+    const km = String(raw).match(/#([A-Za-z][A-Za-z0-9_]*)/);
     state.entries.push({
       code: code.getAttribute('code') || '',
       codeSystem: code.getAttribute('codeSystem') || '',
