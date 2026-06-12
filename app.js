@@ -234,11 +234,21 @@ function buildKeyPanel(keys) {
     });
     nameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') nameInput.blur(); });
 
+    // Nút toggle dấu # cuối (single ↔ double)
+    const suffixBtn = document.createElement('button');
+    suffixBtn.type = 'button';
+    suffixBtn.className = 'suffix-toggle' + (fmt === 'double' ? ' active' : '');
+    suffixBtn.textContent = '#';
+    suffixBtn.title = fmt === 'double' ? 'Đang dùng #key# — bấm để bỏ # cuối' : 'Bấm để thêm # cuối (#key#)';
+    suffixBtn.addEventListener('click', () => {
+      const isDouble = suffixBtn.classList.toggle('active');
+      suffixBtn.title = isDouble ? 'Đang dùng #key# — bấm để bỏ # cuối' : 'Bấm để thêm # cuối (#key#)';
+      changeKeyFormat(key, isDouble);
+    });
+
     renameRow.innerHTML = '<span class="hash">#</span>';
     renameRow.appendChild(nameInput);
-    if (fmt === 'double') {
-      renameRow.insertAdjacentHTML('beforeend', '<span class="hash">#</span>');
-    }
+    renameRow.appendChild(suffixBtn);
     wrap.appendChild(renameRow);
 
     // Hàng giá trị xem trước
