@@ -8,13 +8,20 @@ const state = {
   keyValues: {},      // { key: giá trị xem trước }
   keyLabels: {},      // { key: nhãn thân thiện (từ displayName) }
   checkboxKeys: {},   // { key: true } nếu là kiểu checkbox (value BL)
+  keyFormats: {},     // { key: 'double' | 'single' } — format gốc trong code
   entries: [],        // danh sách observation cho tab SQL
   activeSrc: 'xml',   // tab nguồn đang xem: xml | xsl
 };
 
 const CHECK_TRUE = ['x', 'true', '1', 'yes', 'co', 'có', 'checked', '✓', '☑'];
-const KEY_RE = /#([A-Za-z][A-Za-z0-9_]*)/g;
+const KEY_RE = '#([A-Za-z][A-Za-z0-9_]*)(?:(#)|(?=[^A-Za-z0-9_]|$))';
 
+function makeKeyRe() { return new RegExp(KEY_RE, 'g'); }
+ 
+// Trả về { key, isDouble } từ một lần match
+function parseKeyMatch(m) {
+  return { key: m[1], isDouble: m[2] === '#' };
+}
 /* ============================================================
  * Tiện ích
  * ========================================================== */
@@ -71,15 +78,29 @@ function renderFromXml() {
   const seen = new Set();
   [xml, xsl].forEach((text) => {
     let m;
-    const re = new RegExp(KEY_RE.source, 'g');
+    const re = makeKeyRe();
     while ((m = re.exec(text)) !== null) {
-      if (!seen.has(m[1])) { seen.add(m[1]); found.push(m[1]); }
+      const { key, isDouble } = parseKeyMatch(m);
+      if (!seen.has(key)) {
+        seen.add(key);
+        found.push(key);
+        // Ghi format lần đầu gặp (ưu tiên double nếu đã từng thấy double)
+        state.keyFormats[key] = isDouble ? 'double' : 'single';
+      } else if (isDouble && state.keyFormats[key] === 'single') {
+        // Nâng lên double nếu tìm thấy dạng #key# ở đâu đó
+        state.keyFormats[key] = 'double';
+      }
     }
   });
 
   const newValues = {};
-  found.forEach((k) => { newValues[k] = state.keyValues[k] || ''; });
+  const newFormats = {};
+  found.forEach((k) => {
+    newValues[k] = state.keyValues[k] || '';
+    newFormats[k] = state.keyFormats[k] || 'single';
+  });
   state.keyValues = newValues;
+  state.keyFormats = newFormats;
 
   buildEntries(doc);
   buildKeyPanel(found);
@@ -100,11 +121,15 @@ function scanLabelsAndCheckboxes(doc) {
     const type = value.getAttribute('xsi:type')
       || value.getAttributeNS('http://www.w3.org/2001/XMLSchema-instance', 'type');
     const raw = value.getAttribute('value') != null ? value.getAttribute('value') : value.textContent;
-    const km = String(raw).match(/#([A-Za-z][A-Za-z0-9_]*)/);
+    const km = String(raw).match(makeKeyRe());
     if (km) {
-      const key = km[1];
-      if (display) state.keyLabels[key] = display;
-      if (type && /BL/i.test(type)) state.checkboxKeys[key] = true;
+      const re = makeKeyRe();
+      const first = re.exec(String(raw));
+      if (first) {
+        const key = first[1];
+        if (display) state.keyLabels[key] = display;
+        if (type && /BL/i.test(type)) state.checkboxKeys[key] = true;
+      }
     }
   });
 }
@@ -142,6 +167,7 @@ function buildKeyPanel(keys) {
 
   keys.forEach((key) => {
     const label = state.keyLabels[key] || '';
+    const fmt = state.keyFormats[key] || 'single';
     const wrap = document.createElement('div');
     wrap.className = 'key-item';
     wrap.dataset.key = key;
@@ -167,6 +193,9 @@ function buildKeyPanel(keys) {
     nameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') nameInput.blur(); });
     renameRow.innerHTML = '<span class="hash">#</span>';
     renameRow.appendChild(nameInput);
+    if (fmt === 'double') {
+      renameRow.insertAdjacentHTML('beforeend', '<span class="hash">#</span>');
+    }
     wrap.appendChild(renameRow);
 
     // Hàng giá trị xem trước
@@ -187,19 +216,31 @@ function buildKeyPanel(keys) {
 // Đổi tên key trong CẢ XML lẫn XSL, rồi render lại
 function renameKey(oldKey, newKey) {
   if (!newKey || newKey === oldKey) return false;
-  if (!/^[^#\s<>]+$/.test(newKey)) {
+  if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(newKey)) {
     toast('Tên key không hợp lệ (không chứa # khoảng trắng < >)');
     return false;
   }
-  const re = new RegExp('#' + escapeRegex(oldKey) + '(?![A-Za-z0-9_])', 'g');
-  $('#xmlInput').value = $('#xmlInput').value.replace(re, '#' + newKey + '#');
-  $('#xslInput').value = $('#xslInput').value.replace(re, '#' + newKey + '#');
+
+  const reDouble = new RegExp('#' + escapeRegex(oldKey) + '#', 'g');
+  const reSingle = new RegExp('#' + escapeRegex(oldKey) + '(?![A-Za-z0-9_#])', 'g');
+  const replaceInText = (text) => {
+    text = text.replace(reDouble, '#' + newKey + '#');
+    text = text.replace(reSingle, '#' + newKey);
+    return text;
+  };
+
+  $('#xmlInput').value = replaceInText($('#xmlInput').value);
+  $('#xslInput').value = replaceInText($('#xslInput').value);
 
   // chuyển giá trị đã nhập sang tên mới
   if (state.keyValues[oldKey] && !state.keyValues[newKey]) {
     state.keyValues[newKey] = state.keyValues[oldKey];
   }
+  if (state.keyFormats[oldKey]) {
+    state.keyFormats[newKey] = state.keyFormats[oldKey];
+  }
   delete state.keyValues[oldKey];
+  delete state.keyFormats[oldKey];
 
   renderFromXml();
   toast(`#${oldKey}# → #${newKey}#`);
@@ -220,7 +261,7 @@ function filterKeys(term) {
  * ========================================================== */
 // Cho chuỗi HTML (dùng sau khi transform bằng XSL)
 function substituteInHtml(html) {
-  return html.replace(/#([A-Za-z][A-Za-z0-9_]*)/g, (full, key) => keyToHtml(key));
+  return html.replace(makeKeyRe(), (full, key) => keyToHtml(key));
 }
 // Quy tắc render 1 key
 function keyToHtml(key) {
@@ -229,12 +270,12 @@ function keyToHtml(key) {
   }
   const v = state.keyValues[key];
   if (v !== undefined && v !== '') return `<span class="val">${escapeHtml(v)}</span>`;
-  return `<span class="unfilled">#${escapeHtml(key)}</span>`;
+  return `<span class="unfilled">#${escapeHtml(key)}${state.keyFormats[key] === 'double' ? '#' : ''}</span>`;
 }
 // Cho text thuần (dùng trong bộ render mặc định)
 function substitute(text) {
   let out = '', last = 0, m;
-  const re = /#([A-Za-z][A-Za-z0-9_]*)/g;
+  const re = makeKeyRe();
   while ((m = re.exec(text)) !== null) {
     out += escapeHtml(text.slice(last, m.index));
     out += keyToHtml(m[1]);
@@ -244,7 +285,8 @@ function substitute(text) {
   return out;
 }
 function resolveRawKeyValue(text) {
-  const m = String(text).match(/#([^#\s<>]+)#/);
+  const re = makeKeyRe();
+  const m = re.exec(String(text));
   return m ? (state.keyValues[m[1]] || '') : text;
 }
 
