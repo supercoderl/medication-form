@@ -339,3 +339,31 @@ code { font-family: var(--mono); font-size: 12px; background: var(--code-bg); pa
   body, .tab-panel, .preview-panel, .paper-scroll { overflow: visible; height: auto; display: block; }
   .paper { border: none; box-shadow: none; max-width: none; }
 }
+
+
+.suffix-toggle {
+  background: none;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  color: #aaa;
+  cursor: pointer;
+  font-family: monospace;
+  font-size: 13px;
+  font-weight: bold;
+  line-height: 1;
+  margin-left: 2px;
+  opacity: 0.45;
+  padding: 1px 5px;
+  transition: background 0.15s, color 0.15s, opacity 0.15s;
+}
+.suffix-toggle:hover {
+  opacity: 0.8;
+  border-color: #999;
+}
+.suffix-toggle.active {
+  background: #e8f0fe;
+  border-color: #4a7cf6;
+  color: #4a7cf6;
+  opacity: 1;
+}
+ 
