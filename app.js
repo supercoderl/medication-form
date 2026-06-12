@@ -14,14 +14,24 @@ const state = {
 };
 
 const CHECK_TRUE = ['x', 'true', '1', 'yes', 'co', 'có', 'checked', '✓', '☑'];
-const KEY_RE = '#([A-Za-z][A-Za-z0-9_]*)(?:(#)|(?=[^A-Za-z0-9_]|$))';
 
-function makeKeyRe() { return new RegExp(KEY_RE, 'g'); }
- 
+/* ============================================================
+ * Regex hỗ trợ cả hai format:
+ *   - #key#  (double)  → group(1) = key, group(2) = '#'
+ *   - #key   (single)  → group(1) = key, group(2) = ''
+ *
+ * Ưu tiên khớp #key# trước (greedy với # cuối).
+ * Ký tự hợp lệ trong tên key: chữ, số, _, không chứa # khoảng trắng < >
+ * ========================================================== */
+const KEY_RE_SRC = '#([A-Za-z][A-Za-z0-9_]*)(?:(#)|(?=[^A-Za-z0-9_]|$))';
+
+function makeKeyRe() { return new RegExp(KEY_RE_SRC, 'g'); }
+
 // Trả về { key, isDouble } từ một lần match
 function parseKeyMatch(m) {
   return { key: m[1], isDouble: m[2] === '#' };
 }
+
 /* ============================================================
  * Tiện ích
  * ========================================================== */
@@ -73,7 +83,7 @@ function renderFromXml() {
   state.doc = doc;
   scanLabelsAndCheckboxes(doc);
 
-  // Bóc key từ CẢ xml lẫn xsl (giữ lại giá trị cũ nếu trùng)
+  // Bóc key từ CẢ xml lẫn xsl — ghi nhớ format gốc (double/single)
   const found = [];
   const seen = new Set();
   [xml, xsl].forEach((text) => {
@@ -123,6 +133,7 @@ function scanLabelsAndCheckboxes(doc) {
     const raw = value.getAttribute('value') != null ? value.getAttribute('value') : value.textContent;
     const km = String(raw).match(makeKeyRe());
     if (km) {
+      // Lấy key từ match đầu tiên
       const re = makeKeyRe();
       const first = re.exec(String(raw));
       if (first) {
@@ -159,7 +170,7 @@ function buildKeyPanel(keys) {
   const list = $('#keyList');
   $('#keyCount').textContent = keys.length;
   if (!keys.length) {
-    list.innerHTML = '<div class="empty-hint">Chưa có key nào. Dán XML và bấm “Render &amp; Bóc key”.</div>';
+    list.innerHTML = '<div class="empty-hint">Chưa có key nào. Dán XML và bấm "Render &amp; Bóc key".</div>';
     return;
   }
 
@@ -179,7 +190,7 @@ function buildKeyPanel(keys) {
       wrap.appendChild(lab);
     }
 
-    // Hàng đổi tên key
+    // Hàng đổi tên key — hiển thị format thực tế
     const renameRow = document.createElement('div');
     renameRow.className = 'key-rename';
     const nameInput = document.createElement('input');
@@ -187,10 +198,42 @@ function buildKeyPanel(keys) {
     nameInput.value = key;
     nameInput.title = 'Đổi tên key trong code';
     nameInput.addEventListener('change', () => {
-      const newKey = nameInput.value.trim();
-      if (!renameKey(key, newKey)) nameInput.value = key; // hoàn tác nếu không hợp lệ
+      let raw = nameInput.value.trim();
+
+      // Người dùng có thể gõ #key# hoặc #key hoặc key — đều chấp nhận
+      // Bóc tên key thuần và format mong muốn
+      let wantDouble = state.keyFormats[key] === 'double'; // giữ nguyên format mặc định
+      if (raw.startsWith('#')) {
+        raw = raw.slice(1); // bỏ # đầu
+        wantDouble = raw.endsWith('#'); // có # cuối → double
+        if (wantDouble) raw = raw.slice(0, -1); // bỏ # cuối
+      }
+
+      const newKey = raw;
+      const sameKey = newKey === key;
+      const sameFormat = (wantDouble ? 'double' : 'single') === (state.keyFormats[key] || 'single');
+
+      if (!newKey) { nameInput.value = key; return; }
+      if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(newKey)) {
+        toast('Tên key không hợp lệ (bắt đầu bằng chữ, chỉ chứa chữ/số/_)');
+        nameInput.value = key;
+        return;
+      }
+
+      // Đổi format (single ↔ double) mà không đổi tên
+      if (sameKey && !sameFormat) {
+        changeKeyFormat(key, wantDouble);
+        return;
+      }
+
+      // Đổi tên (kèm theo format mới nếu có)
+      if (!sameKey) {
+        const ok = renameKey(key, newKey, wantDouble);
+        if (!ok) nameInput.value = key;
+      }
     });
     nameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') nameInput.blur(); });
+
     renameRow.innerHTML = '<span class="hash">#</span>';
     renameRow.appendChild(nameInput);
     if (fmt === 'double') {
@@ -213,37 +256,55 @@ function buildKeyPanel(keys) {
   });
 }
 
+// Chuyển format single ↔ double cho key (thay trong XML/XSL luôn)
+function changeKeyFormat(key, wantDouble) {
+  const reDouble = new RegExp('#' + escapeRegex(key) + '#', 'g');
+  const reSingle = new RegExp('#' + escapeRegex(key) + '(?![A-Za-z0-9_#])', 'g');
+  const replaceInText = (text) => {
+    if (wantDouble) {
+      return text.replace(reSingle, '#' + key + '#');
+    } else {
+      return text.replace(reDouble, '#' + key);
+    }
+  };
+  $('#xmlInput').value = replaceInText($('#xmlInput').value);
+  $('#xslInput').value = replaceInText($('#xslInput').value);
+  state.keyFormats[key] = wantDouble ? 'double' : 'single';
+  renderFromXml();
+  toast('Format: #' + key + (wantDouble ? '#' : ''));
+}
+
 // Đổi tên key trong CẢ XML lẫn XSL, rồi render lại
-function renameKey(oldKey, newKey) {
+// wantDouble (tuỳ chọn): nếu truyền vào thì đổi format luôn cùng lúc
+function renameKey(oldKey, newKey, wantDouble) {
   if (!newKey || newKey === oldKey) return false;
   if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(newKey)) {
-    toast('Tên key không hợp lệ (không chứa # khoảng trắng < >)');
+    toast('Tên key không hợp lệ (bắt đầu bằng chữ, chỉ chứa chữ/số/_)');
     return false;
   }
 
+  const targetDouble = wantDouble !== undefined ? wantDouble : (state.keyFormats[oldKey] === 'double');
   const reDouble = new RegExp('#' + escapeRegex(oldKey) + '#', 'g');
   const reSingle = new RegExp('#' + escapeRegex(oldKey) + '(?![A-Za-z0-9_#])', 'g');
+
   const replaceInText = (text) => {
-    text = text.replace(reDouble, '#' + newKey + '#');
-    text = text.replace(reSingle, '#' + newKey);
+    text = text.replace(reDouble, '#' + newKey + (targetDouble ? '#' : ''));
+    text = text.replace(reSingle, '#' + newKey + (targetDouble ? '#' : ''));
     return text;
   };
 
   $('#xmlInput').value = replaceInText($('#xmlInput').value);
   $('#xslInput').value = replaceInText($('#xslInput').value);
 
-  // chuyển giá trị đã nhập sang tên mới
   if (state.keyValues[oldKey] && !state.keyValues[newKey]) {
     state.keyValues[newKey] = state.keyValues[oldKey];
   }
-  if (state.keyFormats[oldKey]) {
-    state.keyFormats[newKey] = state.keyFormats[oldKey];
-  }
+  state.keyFormats[newKey] = targetDouble ? 'double' : 'single';
   delete state.keyValues[oldKey];
   delete state.keyFormats[oldKey];
 
   renderFromXml();
-  toast(`#${oldKey}# → #${newKey}#`);
+  toast('#' + oldKey + ' → #' + newKey + (targetDouble ? '#' : ''));
   return true;
 }
 
@@ -263,6 +324,7 @@ function filterKeys(term) {
 function substituteInHtml(html) {
   return html.replace(makeKeyRe(), (full, key) => keyToHtml(key));
 }
+
 // Quy tắc render 1 key
 function keyToHtml(key) {
   if (state.checkboxKeys[key]) {
@@ -272,6 +334,7 @@ function keyToHtml(key) {
   if (v !== undefined && v !== '') return `<span class="val">${escapeHtml(v)}</span>`;
   return `<span class="unfilled">#${escapeHtml(key)}${state.keyFormats[key] === 'double' ? '#' : ''}</span>`;
 }
+
 // Cho text thuần (dùng trong bộ render mặc định)
 function substitute(text) {
   let out = '', last = 0, m;
@@ -284,6 +347,7 @@ function substitute(text) {
   out += escapeHtml(text.slice(last));
   return out;
 }
+
 function resolveRawKeyValue(text) {
   const re = makeKeyRe();
   const m = re.exec(String(text));
@@ -304,8 +368,7 @@ function renderPreview() {
 
   const xsl = $('#xslInput').value.trim();
   if (xsl) {
-    if (renderWithXsl(paper, xsl)) return; // thành công
-    // nếu lỗi -> rơi xuống bộ mặc định bên dưới (đã hiện cảnh báo)
+    if (renderWithXsl(paper, xsl)) return;
   }
   renderWithDefault(paper);
 }
@@ -399,7 +462,8 @@ function buildEntries(doc) {
     const type = value.getAttribute('xsi:type')
       || value.getAttributeNS('http://www.w3.org/2001/XMLSchema-instance', 'type') || 'ST';
     const raw = value.getAttribute('value') != null ? value.getAttribute('value') : value.textContent.trim();
-    const km = String(raw).match(/#([A-Za-z][A-Za-z0-9_]*)/);
+    const re = makeKeyRe();
+    const km = re.exec(String(raw));
     state.entries.push({
       code: code.getAttribute('code') || '',
       codeSystem: code.getAttribute('codeSystem') || '',
