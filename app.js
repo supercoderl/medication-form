@@ -60,6 +60,16 @@ function isChecked(val) {
 /* ============================================================
  * Parse XML + bóc key (từ cả XML & XSL) + đọc entries
  * ========================================================== */
+function resetAndRender() {
+  // Xoá toàn bộ state trước khi render XML mới
+  state.keyValues = {};
+  state.keyFormats = {};
+  state.keyLabels = {};
+  state.checkboxKeys = {};
+  state.entries = [];
+  renderFromXml();
+}
+
 function renderFromXml() {
   const xml = $('#xmlInput').value.trim();
   const xsl = $('#xslInput').value.trim();
@@ -577,6 +587,7 @@ function initEvents() {
   });
 
   $('#renderBtn').addEventListener('click', renderFromXml);
+  $('#resetRenderBtn').addEventListener('click', resetAndRender);
   $('#loadSample').addEventListener('click', () => {
     $('#xmlInput').value = window.SAMPLE_XML || '';
     $('#xslInput').value = window.SAMPLE_XSL || '';
